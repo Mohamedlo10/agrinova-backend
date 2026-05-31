@@ -680,7 +680,6 @@ def historique_messages(
 def profil_public(
     user_id: int,
     db: Session = Depends(get_db),
-    current_user: Optional[Utilisateur] = None
 ):
     user = db.query(Utilisateur).filter(Utilisateur.id == user_id).first()
     if not user:
