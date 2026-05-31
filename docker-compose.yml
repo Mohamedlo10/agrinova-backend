@@ -26,6 +26,7 @@ services:
       GROQ_API_KEY: ${GROQ_API_KEY}
       FRONTEND_URL: ${FRONTEND_URL}
       ENV: production
+      SERVER_URL: ${SERVER_URL:-https://apiagrinova.mouhadev.com}
     depends_on:
       db:
         condition: service_healthy

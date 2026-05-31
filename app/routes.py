@@ -349,8 +349,8 @@ async def upload_image(
     with open(save_path, "wb") as f:
         f.write(out.getvalue())
 
-    base_url = str(request.base_url).rstrip("/")
-    return {"url": f"{base_url}/static/images/{filename}"}
+    server_url = os.getenv("SERVER_URL", str(request.base_url).rstrip("/"))
+    return {"url": f"{server_url}/static/images/{filename}"}
 
 
 # ══════════════════════════════════════════════
