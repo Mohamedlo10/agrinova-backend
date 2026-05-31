@@ -1,10 +1,12 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from app.database import engine, Base
 from app.routes import router
 import os
 
 Base.metadata.create_all(bind=engine)
+os.makedirs("static/images", exist_ok=True)
 
 app = FastAPI(
     title="Agrinova API",
@@ -26,6 +28,7 @@ app.add_middleware(
 )
 
 app.include_router(router, prefix="/api")
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
 @app.get("/")

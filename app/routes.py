@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, func as sqlfunc
 from pydantic import BaseModel
 from typing import Optional
 from app.database import get_db
+import uuid, os
 from app.models import (
     Utilisateur, Produit, Commande, Avis, Message,
     ConversationBot, Post, PostLike, PostCommentaire
@@ -49,6 +50,7 @@ class ProduitSchema(BaseModel):
     categorie: Optional[str] = None
     photo: Optional[str] = None
     localisation: Optional[str] = None
+    est_disponible: Optional[bool] = True
 
 class CommandeSchema(BaseModel):
     produit_id: int
@@ -308,6 +310,50 @@ def recherche_globale(q: str, db: Session = Depends(get_db)):
 
 
 # ══════════════════════════════════════════════
+# UPLOAD IMAGE
+# ══════════════════════════════════════════════
+
+@router.post("/upload/image")
+async def upload_image(
+    request: Request,
+    file: UploadFile = File(...),
+    user: Utilisateur = Depends(get_utilisateur_actuel),
+):
+    try:
+        from PIL import Image
+        import io
+    except ImportError:
+        raise HTTPException(status_code=500, detail="Pillow non installé")
+
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Fichier image requis (JPEG, PNG, WebP)")
+
+    data = await file.read()
+    if len(data) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Image trop grande (max 10 Mo)")
+
+    img = Image.open(io.BytesIO(data))
+    if img.mode in ("RGBA", "P", "LA"):
+        img = img.convert("RGB")
+
+    max_size = 1200
+    if img.width > max_size or img.height > max_size:
+        img.thumbnail((max_size, max_size), Image.LANCZOS)
+
+    filename = f"{uuid.uuid4().hex}.jpg"
+    save_path = os.path.join("static", "images", filename)
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+
+    out = io.BytesIO()
+    img.save(out, format="JPEG", quality=80, optimize=True)
+    with open(save_path, "wb") as f:
+        f.write(out.getvalue())
+
+    base_url = str(request.base_url).rstrip("/")
+    return {"url": f"{base_url}/static/images/{filename}"}
+
+
+# ══════════════════════════════════════════════
 # PRODUITS ROUTES
 # ══════════════════════════════════════════════
 
@@ -362,6 +408,7 @@ def creer_produit(
         photo=data.photo,
         localisation=data.localisation or user.localisation,
         agriculteur_id=user.id,
+        est_disponible=data.est_disponible if data.est_disponible is not None else True,
     )
     db.add(produit)
     db.commit()
