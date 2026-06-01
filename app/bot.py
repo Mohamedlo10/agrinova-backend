@@ -319,7 +319,8 @@ def chat_avec_groq(message: str, user: Utilisateur, db: Session) -> str:
             max_tokens=1500,
         )
     except Exception as e:
-        return f"Je rencontre une difficulté technique momentanée ({type(e).__name__}). Veuillez réessayer dans quelques instants."
+        detail = getattr(e, 'message', None) or getattr(e, 'body', None) or str(e)
+        return f"Je rencontre une difficulté technique momentanée. Détail : {detail}"
 
     msg = reponse.choices[0].message
 
@@ -328,7 +329,7 @@ def chat_avec_groq(message: str, user: Utilisateur, db: Session) -> str:
         # Ajouter la réponse de l'assistant avec ses tool_calls
         messages.append({
             "role": "assistant",
-            "content": msg.content or "",
+            "content": msg.content,   # None → null JSON, requis par Groq quand tool_calls est présent
             "tool_calls": [
                 {
                     "id": tc.id,
@@ -375,7 +376,8 @@ def chat_avec_groq(message: str, user: Utilisateur, db: Session) -> str:
             )
             contenu_reponse = reponse2.choices[0].message.content or ""
         except Exception as e:
-            contenu_reponse = f"Je rencontre une difficulté technique momentanée ({type(e).__name__}). Veuillez réessayer dans quelques instants."
+            detail = getattr(e, 'message', None) or getattr(e, 'body', None) or str(e)
+            contenu_reponse = f"Je rencontre une difficulté technique momentanée. Détail : {detail}"
 
     else:
         contenu_reponse = msg.content or ""
