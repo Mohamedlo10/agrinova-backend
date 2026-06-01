@@ -129,7 +129,7 @@ def _construire_contexte(user: Utilisateur, db: Session) -> str:
             .all()
         )
         nb_dispo = sum(1 for p in produits if p.est_disponible)
-        stock_total = sum(p.quantite_disponible for p in produits)
+        stock_total = sum((p.quantite_disponible or 0) for p in produits)
 
         if produits:
             by_cat: dict[str, list] = {}
@@ -149,7 +149,7 @@ def _construire_contexte(user: Utilisateur, db: Session) -> str:
                         f" | publié le {_date_fr(p.date_publication)}"
                     )
 
-            low_stock = [p for p in produits if p.est_disponible and p.quantite_disponible <= 5]
+            low_stock = [p for p in produits if p.est_disponible and (p.quantite_disponible or 0) <= 5]
             if low_stock:
                 prod_lines.append(
                     "\n⚠️ ALERTE STOCK BAS (≤5 unités): "
@@ -167,7 +167,7 @@ def _construire_contexte(user: Utilisateur, db: Session) -> str:
             .all()
         )
         if commandes:
-            total_revenus = sum(c.montant_total for c in commandes)
+            total_revenus = sum((c.montant_total or 0) for c in commandes)
             by_statut: dict[str, int] = {}
             for c in commandes:
                 by_statut[c.statut] = by_statut.get(c.statut, 0) + 1
@@ -181,7 +181,7 @@ def _construire_contexte(user: Utilisateur, db: Session) -> str:
             top_rev = sorted(prod_revenus.items(), key=lambda x: x[1], reverse=True)[:5]
 
             debut_mois = now.replace(day=1, hour=0, minute=0, second=0)
-            rev_mois = sum(c.montant_total for c in commandes if c.date_commande and c.date_commande >= debut_mois)
+            rev_mois = sum((c.montant_total or 0) for c in commandes if c.date_commande and c.date_commande >= debut_mois)
             cmd_mois = sum(1 for c in commandes if c.date_commande and c.date_commande >= debut_mois)
 
             cmd_lines = [
@@ -231,12 +231,12 @@ def _construire_contexte(user: Utilisateur, db: Session) -> str:
             .all()
         )
         if commandes:
-            total_depenses = sum(c.montant_total for c in commandes)
+            total_depenses = sum((c.montant_total or 0) for c in commandes)
             by_statut: dict[str, int] = {}
             for c in commandes:
                 by_statut[c.statut] = by_statut.get(c.statut, 0) + 1
             debut_mois = now.replace(day=1, hour=0, minute=0, second=0)
-            dep_mois = sum(c.montant_total for c in commandes if c.date_commande and c.date_commande >= debut_mois)
+            dep_mois = sum((c.montant_total or 0) for c in commandes if c.date_commande and c.date_commande >= debut_mois)
 
             cmd_lines = [
                 f"=== MES COMMANDES ({len(commandes)}) ===",
@@ -282,7 +282,13 @@ Pour toute question sur les produits de la plateforme, utilise l'outil de recher
 
 # ── Main chat function ────────────────────────────────────────────────────────
 def chat_avec_groq(message: str, user: Utilisateur, db: Session) -> str:
-    contexte = _construire_contexte(user, db)
+    try:
+        contexte = _construire_contexte(user, db)
+    except Exception:
+        contexte = (
+            f"=== PROFIL UTILISATEUR ===\n"
+            f"Nom: {user.nom}\nRôle: {user.role}\nEmail: {user.email}"
+        )
     system = _system_prompt(contexte)
 
     historique_db = (
