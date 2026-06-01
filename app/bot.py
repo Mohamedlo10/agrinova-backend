@@ -264,16 +264,19 @@ def _system_prompt(contexte: str) -> str:
 Tu as accès en temps réel aux données de l'utilisateur connecté ET tu peux effectuer des recherches en direct sur tous les produits de la plateforme via l'outil `rechercher_produits`.
 
 **Quand utiliser `rechercher_produits` :**
-- L'utilisateur demande des produits spécifiques ("tomates", "riz", "mangues"…)
+- L'utilisateur demande des produits agricoles disponibles à la vente ("tomates", "riz", "mangues"…)
 - Il veut comparer des prix ("le moins cher", "pas plus de 500 FCFA")
-- Il cherche dans une région ("à Thiès", "autour de Dakar")
-- Il demande ce qui est disponible dans une catégorie
-- Il veut savoir si un produit existe sur la plateforme
-→ Appelle toujours cet outil pour avoir les données fraîches, même si des produits sont déjà dans le contexte.
+- Il cherche des producteurs dans une région ("à Thiès", "autour de Dakar")
+- Il demande ce qui est disponible dans une catégorie (Légumes, Fruits, Céréales, Légumineuses)
+
+**Quand NE PAS utiliser `rechercher_produits` :**
+- Questions agronomiques générales (irrigation, maladies, calendrier, sol…) → donne directement tes conseils
+- Questions sur les commandes/revenus/statistiques de l'utilisateur → utilise le contexte fourni
+- Questions sur les pratiques agricoles → réponds avec tes connaissances
 
 Tu réponds toujours en français, de façon claire, concise et bienveillante.
 Pour les analyses chiffrées sur l'utilisateur, utilise les données du contexte.
-Pour toute question sur les produits de la plateforme, utilise l'outil de recherche.
+Pour toute question sur l'achat/vente de produits agricoles sur la plateforme, utilise l'outil de recherche.
 
 --- DONNÉES DE L'UTILISATEUR ---
 {contexte}
@@ -306,14 +309,17 @@ def chat_avec_groq(message: str, user: Utilisateur, db: Session) -> str:
     messages.append({"role": "user", "content": message})
 
     # ── Premier appel avec les outils disponibles ──────────────────────────
-    reponse = client.chat.completions.create(
-        model=GROQ_MODEL,
-        messages=messages,
-        tools=TOOLS,
-        tool_choice="auto",
-        temperature=0.5,
-        max_tokens=1500,
-    )
+    try:
+        reponse = client.chat.completions.create(
+            model=GROQ_MODEL,
+            messages=messages,
+            tools=TOOLS,
+            tool_choice="auto",
+            temperature=0.5,
+            max_tokens=1500,
+        )
+    except Exception as e:
+        return f"Je rencontre une difficulté technique momentanée ({type(e).__name__}). Veuillez réessayer dans quelques instants."
 
     msg = reponse.choices[0].message
 
@@ -337,13 +343,19 @@ def chat_avec_groq(message: str, user: Utilisateur, db: Session) -> str:
         })
 
         # Exécuter chaque outil appelé
+        _PARAMS_CONNUS = {"nom", "categorie", "prix_max", "localisation"}
         for tc in msg.tool_calls:
             if tc.function.name == "rechercher_produits":
                 try:
                     args = json.loads(tc.function.arguments)
                 except json.JSONDecodeError:
                     args = {}
-                resultat = _executer_recherche_produits(db, **args)
+                # Filtrer les paramètres inconnus que le modèle pourrait halluciner
+                args = {k: v for k, v in args.items() if k in _PARAMS_CONNUS}
+                try:
+                    resultat = _executer_recherche_produits(db, **args)
+                except Exception as e:
+                    resultat = f"Erreur lors de la recherche : {e}"
             else:
                 resultat = f"Outil '{tc.function.name}' inconnu."
 
@@ -354,13 +366,16 @@ def chat_avec_groq(message: str, user: Utilisateur, db: Session) -> str:
             })
 
         # Deuxième appel avec les résultats de l'outil
-        reponse2 = client.chat.completions.create(
-            model=GROQ_MODEL,
-            messages=messages,
-            temperature=0.5,
-            max_tokens=1500,
-        )
-        contenu_reponse = reponse2.choices[0].message.content
+        try:
+            reponse2 = client.chat.completions.create(
+                model=GROQ_MODEL,
+                messages=messages,
+                temperature=0.5,
+                max_tokens=1500,
+            )
+            contenu_reponse = reponse2.choices[0].message.content or ""
+        except Exception as e:
+            contenu_reponse = f"Je rencontre une difficulté technique momentanée ({type(e).__name__}). Veuillez réessayer dans quelques instants."
 
     else:
         contenu_reponse = msg.content or ""
