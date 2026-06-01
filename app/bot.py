@@ -35,8 +35,7 @@ TOOLS = [
                         "description": "Filtrer par catégorie. Valeurs acceptées : Légumes, Fruits, Céréales, Légumineuses. Ne pas remplir pour chercher dans toutes les catégories.",
                     },
                     "prix_max": {
-                        "type": "number",
-                        "description": "Prix maximum en FCFA par unité",
+                        "description": "Prix maximum en FCFA par unité (ex: 500, 1000). Omettre si pas de limite de prix.",
                     },
                     "localisation": {
                         "type": "string",
@@ -358,7 +357,13 @@ def chat_avec_groq(message: str, user: Utilisateur, db: Session) -> str:
                     args.pop("nom", None)
                 if args.get("categorie") not in _CATEGORIES_VALIDES:
                     args.pop("categorie", None)
-                if not args.get("prix_max") or args.get("prix_max", 0) <= 0:
+                try:
+                    pm = float(args["prix_max"]) if "prix_max" in args else None
+                    if pm and pm > 0:
+                        args["prix_max"] = pm
+                    else:
+                        args.pop("prix_max", None)
+                except (TypeError, ValueError):
                     args.pop("prix_max", None)
                 if not str(args.get("localisation", "")).strip():
                     args.pop("localisation", None)
