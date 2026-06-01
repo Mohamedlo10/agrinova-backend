@@ -32,8 +32,7 @@ TOOLS = [
                     },
                     "categorie": {
                         "type": "string",
-                        "enum": ["Légumes", "Fruits", "Céréales", "Légumineuses"],
-                        "description": "Filtrer par catégorie",
+                        "description": "Filtrer par catégorie. Valeurs acceptées : Légumes, Fruits, Céréales, Légumineuses. Ne pas remplir pour chercher dans toutes les catégories.",
                     },
                     "prix_max": {
                         "type": "number",
@@ -345,14 +344,24 @@ def chat_avec_groq(message: str, user: Utilisateur, db: Session) -> str:
 
         # Exécuter chaque outil appelé
         _PARAMS_CONNUS = {"nom", "categorie", "prix_max", "localisation"}
+        _CATEGORIES_VALIDES = {"Légumes", "Fruits", "Céréales", "Légumineuses"}
         for tc in msg.tool_calls:
             if tc.function.name == "rechercher_produits":
                 try:
                     args = json.loads(tc.function.arguments)
                 except json.JSONDecodeError:
                     args = {}
-                # Filtrer les paramètres inconnus que le modèle pourrait halluciner
+                # Filtrer les paramètres inconnus
                 args = {k: v for k, v in args.items() if k in _PARAMS_CONNUS}
+                # Nettoyer les valeurs invalides ou vides que le modèle peut halluciner
+                if not str(args.get("nom", "")).strip():
+                    args.pop("nom", None)
+                if args.get("categorie") not in _CATEGORIES_VALIDES:
+                    args.pop("categorie", None)
+                if not args.get("prix_max") or args.get("prix_max", 0) <= 0:
+                    args.pop("prix_max", None)
+                if not str(args.get("localisation", "")).strip():
+                    args.pop("localisation", None)
                 try:
                     resultat = _executer_recherche_produits(db, **args)
                 except Exception as e:
